@@ -1,6 +1,6 @@
 #
-# DATA PLOTTER OF SATELLITE GAIA VERSION 0.1.0
-#
+# DATA PLOTTER OF SATELLITE GAIA VERSION 0.1.0 rev1
+#      WIDE MOSAIC QUERY VERSION
 # SCRIPTED BY JPZEBRA@GITHUB 2022.10.07
 #
 
@@ -33,15 +33,6 @@ ht = 1.0
 
 fx = 100.0
 
-sz = 3
-
-r = ""
-
-
-
-
-
-
 # SUB ROUTINES
 
 def check_and_set_values() :
@@ -65,11 +56,11 @@ def check_and_set_values() :
     cx = rah*360/24
     cy = dcd
 
-    if ex < 1.0 : ex = 1.0
+    if ex < 0.1 : ex = 0.1
     if fx < 1.0 : fx = 1.0
 
-    wd = 2.0/ex
-    ht = 1.0/ex
+    wd = math.ceil(2.0/ex*4)
+    ht = math.ceil(1.0/ex*4)
 
 def star_bright(b,f) :
 
@@ -116,6 +107,11 @@ def handle_close(evt) :
     fig_closed = True
     print("figure closed.")
 
+
+
+
+
+
 # MAIN ROUTINE
 
 def draw_star(refresh) :
@@ -130,27 +126,8 @@ def draw_star(refresh) :
     global ex
     global fx
 
-    coord = SkyCoord(ra=cx, dec=cy, unit=(u.degree, u.degree), frame='icrs')
-    width = u.Quantity(wd, u.deg)
-    height = u.Quantity(ht, u.deg)
-
-    global r
-
-    if refresh :
-
-        print(">>> DATA QUERY <<<")
-
-        r = Gaia.query_object_async(coordinate=coord, width=width, height=height)
-
-    if len(r)<1 : return
-
-    for i in range(0,len(r)-1) :
-        print(" id " + str(r[i]['source_id']) + " parallax " + str(r[i]['parallax']))
-        print(" ra " + str(r[i]['ra']) + " dec " + str(r[i]['dec']) + " pmra " + str(r[i]['pmra']) + " pmdec " + str(r[i]['pmdec']))
-        print(" GBR " + str(r[i]['phot_g_mean_mag']) + " " + str(r[i]['phot_bp_mean_mag']) + " " + str(r[i]['phot_rp_mean_mag']))
-
     fig = pyplot.figure("GAIA VIEW")
-    fig.set_size_inches(12,6)
+    fig.set_size_inches(14,7)
     pyplot.xlim(-100,100)
     pyplot.ylim(-50,50)
 
@@ -164,45 +141,71 @@ def draw_star(refresh) :
     ax.axes.xaxis.set_visible(False)
     ax.axes.yaxis.set_visible(False)
 
+    xx = []
+    yy = []
+    pr = []
+    pd = []
+    sz = []
+
+    for vy in range(0,ht) :
+        dy = (vy/2-ht/4+0.25)
+        for vx in range(0,wd) :
+            dx = (vx/2-wd/4+0.25)
+            coord  = SkyCoord(ra=cx+dx, dec=cy+dy, unit=(u.degree, u.degree), frame='icrs')
+            width  = u.Quantity(0.5, u.deg)
+            height = u.Quantity(0.5, u.deg)
+
+            print(f">>> DATA ({vy},{vx}) <<<")
+
+            r = Gaia.query_object_async(coordinate=coord, width=width, height=height)
+
+            if len(r)<1 : continue
+
+            for i in range(0,len(r)-1) :
+                print(" id " + str(r[i]['source_id']) + " parallax " + str(r[i]['parallax']))
+                print(" ra " + str(r[i]['ra']) + " dec " + str(r[i]['dec']) + " pmra " + str(r[i]['pmra']) + " pmdec " + str(r[i]['pmdec']))
+                print(" GBR " + str(r[i]['phot_g_mean_mag']) + " " + str(r[i]['phot_bp_mean_mag']) + " " + str(r[i]['phot_rp_mean_mag']))
+
+                xx.append((cx -r[i]['ra'])*50*ex)
+                yy.append((r[i]['dec'] - cy)*50*ex)
+                pr.append(r[i]['pmra'])
+                pd.append(r[i]['pmdec'])
+                sz.append(abs(r[i]['parallax']))
+
     tc = 0
 
-    for z in range (0,8) :
+    print(f">>> DRAWING <<<")
 
-        print(f">>> DRAWING {z} <<<")
+    for z in range (0,len(xx)) :
 
-        rmax = math.pow(2,6-z)
-        rmin = rmax/2
+        ar = pr[z]
+        ad = pd[z]
+        ss = sz[z]
 
-        if z==0 : rmax = 100
+        if not (abs(ar) >= 0 and abs(ad) >= 0 ) :
+            ar = 0
+            ad = 0
+        if not ss>0 :
+            ss = 1
 
-        if z==7 : rmin = 0
- 
-        for i in range(0,len(r)-1) :
+        vv = ar*ar + ad*ad
+        if vv < 250/ex : continue
 
-            tag = r[i]['source_id']
-            xx = (cx -r[i]['ra'])/wd*200
-            yy = (r[i]['dec'] - cy)/ht*100
-
-            rr = r[i]['phot_rp_mean_mag']
-            gg = r[i]['phot_g_mean_mag']
-            bb = r[i]['phot_bp_mean_mag']
-            av = star_ave(rr,gg,bb)
-            ss = star_size(av,fx)
-
-            if rmin <= ss and ss<= rmax :
-                if ss>3 : pyplot.plot(xx,yy,marker=".",color="black",markersize=ss+1)
-                pyplot.plot(xx,yy,marker=".",color=star_color(rr,gg,bb,fx),markersize=ss)
-                if tc<100 :
-                    pyplot.text(xx,yy,tag,fontsize=8,color="cyan")
-                    tc = tc + 1
+        pyplot.plot(xx[z],yy[z],marker=".",color=(min((ss/20,1.0)),min((ss/20,1.0)),0.3),markersize=ss*ex)
+        pyplot.plot([xx[z],xx[z]+ar*ex/10],[yy[z],yy[z]-ad*ex/10],color=(min((ss/20,1.0)),min((ss/20,1.0)),0.5),linewidth=1)
 
     pyplot.text(-100,46,"RA:" + str(rah) + " DEC:" + str(dcd) ,fontsize=14,color="lightgreen")
     pyplot.text(-100,-46,"This work has made use of data from the European Space Agency (ESA) mission Gaia" ,fontsize=14,color="orange")
     pyplot.text(-100,-49," (https://www.cosmos.esa.int/gaia)" ,fontsize=14,color="orange")
 
-    pyplot.savefig("gaia.png")
+    pyplot.savefig("flow.png")
 
     pyplot.show()
+
+
+
+
+
 
 # GUI MENU
 
@@ -213,14 +216,12 @@ layout = [ [sg.Text('VIEWER OF SATELLITE GAIA DATA')],
             sg.Text(' DEC(d) '),sg.InputText('0.000000',size=(12,1),key='dec')],
            [sg.Text(' EXPAND '),sg.InputText('1.0000',size=(8,1),key='ext'),
             sg.Text(' BRIGHT '),sg.InputText('100.00',size=(8,1),key='brt')],
-           [sg.Button('OK'),sg.Button('REPAINT'),sg.Button('CANCEL')]
+           [sg.Button('OK'),sg.Button('CANCEL')]
          ]
 
 closed = False
 
-window = sg.Window('GAIA STAR VIEWER Ver0.1',layout)
-
-print(">>> READY <<<")
+window = sg.Window('GAIA FLOW VIEWER Ver0.1rev',layout)
 
 while not closed :
 
@@ -241,13 +242,8 @@ while not closed :
         except ValueError :
             print("Value Erroor !")
 
-    elif event == 'REPAINT' and fig_closed:
-
-        try :
-            ex  = float(values['ext'])
-            fx  = float(values['brt'])
-            draw_star(False)
-        except ValueError :
-            print("Value Erroor !")
 
 # FILE END
+
+
+
